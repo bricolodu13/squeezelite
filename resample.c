@@ -1,4 +1,4 @@
-/* 
+* 
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
@@ -17,11 +17,33 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
+ * upsampling using libsoxr - only included if RESAMPLE set
+ * Adding a GPIO Flag according to the stream samplerate for hardware clock selection
+ *
+ *  (c) Jean Beauve 2019-2020, jean@0W1audio.com
+ * to compile the code : 
+ * open Makefile.resample and modify the Flags as per: OPTS = -DRESAMPLE -DRPI
+ * run make -f Makefile.resample
  */
 
-// upsampling using libsoxr - only included if RESAMPLE set
-
 #include "squeezelite.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int gpio_pin;
+bool gpio_active_low;
+bool gpio_active;
+
+#if RPI
+#define PI_INPUT  0
+#define PI_OUTPUT 1
+#define PI_LOW 0
+#define PI_HIGH 1
+void gpioSetMode(unsigned gpio, unsigned mode);
+void gpioWrite(unsigned gpio, unsigned level);
+int gpioInitialise(void);
+#endif
 
 #if RESAMPLE
 
@@ -171,6 +193,19 @@ bool resample_newstream(struct processstate *process, unsigned raw_sample_rate, 
 
 	process->in_sample_rate = raw_sample_rate;
 	process->out_sample_rate = outrate;
+
+//      Set up audio Clock with gpio(BCM) 7 - wPI 11 -> GPIO read 11
+        #ifdef RPI
+        // Set up gpio  using BCM Pin #'s
+        gpio_pin = 7;
+        gpioInitialise() == 0;
+        gpioSetMode (gpio_pin, PI_OUTPUT);
+        if (raw_sample_rate == 48000) 
+             gpioWrite(gpio_pin, PI_HIGH^gpio_active_low);
+        else if(raw_sample_rate == 44100) 
+             gpioWrite(gpio_pin, PI_LOW^gpio_active_low);
+        #endif
+
 
 	if (r->resampler) {
 		SOXR(r, delete, r->resampler);
